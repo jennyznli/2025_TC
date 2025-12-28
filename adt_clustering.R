@@ -1,10 +1,9 @@
-# FIG 3 - JOINT ANALYSIS 
-# Clustering 
-# ========================
-# LOAD DATA
-# ========================
+# ============================================================
+# Generates tSNE coordinates for the adult cohort. 
+# ============================================================
+source("config.R")
+
 ss <- read_excel(file.path("ss", ADT_META))
-primary <- ss %>% dplyr::filter(Lymph_Node == "F")
 pca <- readRDS(file.path("data", "adt_betas_QCDPB_pr_30000_pca.rds"))
 
 # ========================
@@ -19,7 +18,7 @@ pcs <- pca$x[, 1:num_pcs]
 write.csv(pcs, file.path("data", "adt_unmasked_pca_coords.csv"))
 
 # ========================
-# FINAL t-SNE
+# GENERATE t-SNE EMBEDDINGS
 # ========================
 pcs <- read.csv(file.path("data", "adt_unmasked_pca_coords.csv"), row.names = 'X')
 
@@ -57,10 +56,5 @@ run_tsne <- function(pca_coords, output_name) {
 }
 
 ss_filtered <- ss %>% filter(IDAT %in% rownames(pcs))
-primary_filtered <- primary %>% filter(IDAT %in% rownames(pcs))
+run_tsne(pcs[ss_filtered$IDAT, ], "adt_tsne_all")
 
-cat(sprintf("Running t-SNE on all samples: %d samples\n", nrow(ss_filtered)))
-adt_tsne_all <- run_tsne(pcs[ss_filtered$IDAT, ], "adt_tsne_all")
-
-cat(sprintf("Running t-SNE on primary samples: %d samples\n", nrow(primary_filtered)))
-adt_tsne_primary <- run_tsne(pcs[primary_filtered$IDAT, ], "adt_tsne_primary")

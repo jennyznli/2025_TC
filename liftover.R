@@ -11,12 +11,13 @@ if (length(args) != 2) {
          "Example: Rscript liftover.R ped_betas_QCDPB_mask_prc_imp.rds HM450")
 }
 
+# CONFIGS
+source("../config.R")
+
 BETAS <- args[1]
 PLATFORM <- args[2]
 CONFIG <- BiocParallel::SerialParam()
 
-# setup directory
-BASE_DIR <- "/home/lijz/labprojects/20250721_Jenny/thyroid"
 R_DIR <- file.path(BASE_DIR, "R")
 SS_DIR <- file.path(BASE_DIR, "ss")
 DATA_DIR <- file.path(BASE_DIR, "data")

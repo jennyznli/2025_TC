@@ -1,17 +1,15 @@
 # ============================================================
-#   FIG 4.
 #   This script trains the final RF classifier for
 #   predicting clinical invasiveness in thyroid cancer samples
-#   using DNA methylation data.
+#   using DNA methylation data and tests on validation cohort. 
 # ============================================================
-TARGET <- "Clinical_Invasiveness"
 BATCH_SIZE <- 10000
 N_TREES <- 1000
 N_FEATURES <- 3000
 
 source("config.R")
 
-model_suffix <- if (TARGET == "Clinical_Invasiveness") "invasiveness" else "driver"
+model_suffix <- "invasiveness"
 base_name <- tools::file_path_sans_ext(PED_BETAS)
 
 MODEL_DIR <- file.path("models", paste0("fmodel_", model_suffix, "_", base_name, "_all_samples"))
@@ -28,15 +26,13 @@ ss <- ss[!is.na(ss[[TARGET]]), ]
 
 betas <- readRDS(file.path("data", PED_BETAS))
 
-# Split into train (Primary batch) and test (all others)
+# split into train and test 
 ss_train <- ss %>%
   dplyr::filter(Batch == 'REF') %>% 
-  filter(Primary_Include_In_Analysis == "1")
-
+  filter(Lymph_Node == "F")
 ss_test <- ss %>%
-  filter(!(Batch == 'REF' & Primary_Include_In_Analysis == "1"))
+  filter(!(Batch == 'REF' & Lymph_Node == "F"))
 
-# Match samples
 samples_train <- intersect(colnames(betas), ss_train$IDAT)
 betas_train <- betas[, samples_train]
 ss_train <- ss_train[match(samples_train, ss_train$IDAT), ]
@@ -116,9 +112,12 @@ predictions <- data.frame(
 
 write.csv(predictions, file.path(TEST_DIR, "fmodel_pred_probs.csv"), row.names = FALSE)
 
+# ========================
+# SAVE RESULTS
+# ========================
 ss_full <- as.data.frame(readxl::read_excel(file.path("ss", PED_META)))
 results <- dplyr::left_join(ss_full, predictions, by = "IDAT")
-results$Accuracy <- (results$Clinical_Invasiveness == results$Predicted_Class)
+results$Correct_Prediction <- (results$Clinical_Invasiveness == results$Predicted_Class)
 
 writexl::write_xlsx(results, file.path("ss", "ss_fmodel_invasiveness_predictions.xlsx"))
 
@@ -127,7 +126,7 @@ writexl::write_xlsx(results, file.path("ss", "ss_fmodel_invasiveness_predictions
 # ========================
 results <- read.csv(file.path("data", "fmodel_invasiveness_ped_betas_QCDPB_prc_all_samples", "test", "fmodel_pred_probs.csv"))
 
-ss_val <- readxl::read_excel(file.path("ss", PED_META)) %>% filter(Primary_Include_In_Analysis == "1", Batch == "VAL")
+ss_val <- readxl::read_excel(file.path("ss", PED_META)) %>% filter(Lymph_Node == "F", Batch == "VAL")
 ss_val$Clinical_Invasiveness <- factor(ss_val$Clinical_Invasiveness)
 
 ss_val <- left_join(ss_val, results, by="IDAT") %>% 
@@ -179,11 +178,10 @@ print(conf_mat)
 #                                           
 #        'Positive' Class : High           
 
-wrong <- ss_val %>% filter(Fmodel_Invasiveness_Accuracy == 1) %>% arrange(Clinical_Invasiveness) 
-wrong %>% select(Clinical_Invasiveness) %>% table()
+wrong <- ss_val %>% filter(Fmodel_Invasiveness_Accuracy == 1, Lymph_Node == "F") %>% arrange(Clinical_Invasiveness) 
 
 # ========================
-# ROC CURVE (VALIDATION)
+# ROC CURVE
 # ========================
 roc_obj <- roc(
   response  = ss_val$Clinical_Invasiveness,
@@ -193,34 +191,17 @@ roc_obj <- roc(
 )
 
 auc_val <- as.numeric(auc(roc_obj))
-print(auc_val)
-
-roc_data <- data.frame(
-  FPR = 1 - roc_obj$specificities,
-  TPR = roc_obj$sensitivities
-)
+roc_data <- data.frame(FPR = 1 - roc_obj$specificities, TPR = roc_obj$sensitivities)
 
 p <- ggplot(roc_data, aes(x = FPR, y = TPR)) +
   geom_line(color = "#f8766dff", linewidth = 1) +
   geom_abline(intercept = 0, slope = 1,
               linetype = "dashed", color = "gray70") +
-  annotate(
-    "text",
-    x = 0.65, y = 0.25,
-    label = paste0("AUC = ", round(auc_val, 3)),
-    size = 4.5,
-    color = "#f8766dff"
-  ) +
-  labs(
-    x = "False Positive Rate",
-    y = "True Positive Rate"
-  ) +
+  annotate("text", x = 0.65, y = 0.25, label = paste0("AUC = ", round(auc_val, 3)), size = 4.5, color = "#f8766dff") +
+  labs(x = "False Positive Rate", y = "True Positive Rate") +
   coord_equal() +
   theme_minimal() +
-  theme(
-    axis.title = element_text(size = 12),
-    axis.text  = element_text(size = 10)
-  )
+  theme(axis.title = element_text(size = 12), axis.text  = element_text(size = 10))
 
 pdf(file.path("figures", "val_invasiveness_roc.pdf"),
     height = 4, width = 4)
@@ -238,4 +219,33 @@ pdf(file.path("figures", "fmodel_invasiveness_enrichment_tfbs.pdf"),width = 2.8,
 plotDotFDR(x, n_min = 30, n_max = 30)
 dev.off()
 
+# ========================
+# SHAP ANALYSIS
+# ========================
+train_data <- as.data.frame(t(train_betas3k))
+train_labels <- factor(ifelse(as.factor(ss$Clinical_Invasiveness) == "Low", 0, 1),
+                       levels = c(0, 1))
+
+model_shp <- randomForest(
+  x = train_data,
+  y = train_labels,
+  ntree = 500,
+  mtry = 2,
+  nodesize = 5,
+  importance = TRUE
+)
+saveRDS(model_shp, file.path(SHAP_DIR, "invasiveness_shap_model.rds"))
+
+unified_model <- randomForest.unify(model_shp, train_data)
+shap <- treeshap(unified_model, train_data, interactions = TRUE)
+shp <- shapviz::shapviz(shap, X = train_data)
+
+saveRDS(shap, file.path(SHAP_DIR, "invasiveness_shap.rds"))
+saveRDS(shp, file.path(SHAP_DIR, "invasiveness_shpviz.rds"))
+
+# beeswarm plot
+p <- sv_importance.shapviz(shp, kind = "beeswarm", max_display = 30)
+pdf(file.path(FIG_DIR, "fmodel_invasiveness_beeswarm.pdf"), height = 6, width = 5)
+plot(p)
+dev.off()
 

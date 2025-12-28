@@ -1,15 +1,14 @@
 # ============================================================
-# GENERAL STATS - SUPPLEMENTARY FIG 1, 4
+# This script generates general stat. figures summarizing 
+# probe success rates, tissue types, and global mean methylation 
+# for the pediatric cohort. 
 # ============================================================
-source("config.R")
-
-meta_all <- read_excel(file.path("ss", PED_META))
+source("../config.R")
 
 # ========================
 # LOAD DATA
 # ========================
-ss <- read_excel(file.path("ss", PED_META)) %>% 
-  filter(LN_Include_In_Analysis == 1)
+ss <- read_excel(file.path("ss", PED_META))
 
 ss$Clinical_Invasiveness <- as.factor(ss$Clinical_Invasiveness)
 ss$Clinical_Confidence <- as.factor(ss$Clinical_Confidence)
@@ -31,7 +30,26 @@ ss$IC_EpiDISH <- as.numeric(ss$IC_EpiDISH)
 ss$CC_Cluster <- as.factor(ss$CC_Cluster)
 
 # ========================
-# FIG S1A. PROBE SUCCESS RATE BY BATCH
+# TISSUE TYPE BAR PLOT - BATCH
+# ========================
+tissue_summary <- ss %>% group_by(Batch, Tissue_Type) %>% summarise(count = n(), .groups = 'drop') %>% group_by(Batch) %>% mutate( total = sum(count), proportion = count / total )
+print(tissue_summary)
+
+p_stacked <- ggplot(ss, aes(x = Batch, fill = Tissue_Type)) +
+  geom_bar() +
+  geom_text(stat = "count", aes(label = after_stat(count)),
+            position = position_stack(vjust = 0.5), size = 4) +
+  scale_fill_manual(values = tissue_colors) +
+  labs(title = "Tissue Type Distribution by Batch",
+       x = "Batch", y = "Count", fill = "Tissue Type") +
+  theme_minimal(base_size = 12) +
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggsave("figures/tissue_type_batch_stacked.pdf",
+       p_stacked, width = 4, height = 4.5, device = "pdf")
+
+# ========================
+# PROBE SUCCESS RATE BOX PLOTS - BATCH
 # ========================
 psr_summary <- ss %>%
   group_by(Batch) %>%
@@ -62,92 +80,21 @@ p_batch <- ggboxplot(ss, x = "Batch", y = "Probe_Success_Rate",
   theme(plot.title = element_text(hjust = 0.5)) +
   scale_fill_manual(values = batch_colors)
 
-ggsave("figures/psr_batch_boxplots.pdf",
-       p_batch, width = 3.5, height = 4.5, device = "pdf")
-
+ggsave("figures/psr_batch_boxplots.pdf", p_batch, width = 3.5, height = 4.5, device = "pdf")
 
 # ========================
-# FIG S1B. TISSUE TYPE DISTRIBUTION BY BATCH
-# ========================
-
-tissue_summary <- ss %>% group_by(Batch, Tissue_Type) %>% summarise(count = n(), .groups = 'drop') %>% group_by(Batch) %>% mutate( total = sum(count), proportion = count / total )
-print(tissue_summary)
-
-p_stacked <- ggplot(ss, aes(x = Batch, fill = Tissue_Type)) +
-  geom_bar() +
-  geom_text(stat = "count", aes(label = after_stat(count)),
-            position = position_stack(vjust = 0.5), size = 4) +
-  scale_fill_manual(values = tissue_colors) +
-  labs(title = "Tissue Type Distribution by Batch",
-       x = "Batch", y = "Count", fill = "Tissue Type") +
-  theme_minimal(base_size = 12) +
-  theme(plot.title = element_text(hjust = 0.5))
-
-ggsave("figures/tissue_type_batch_stacked.pdf",
-       p_stacked, width = 4, height = 4.5, device = "pdf")
-
-
-
-
+# GLOBAL MEAN BETA BOX PLOTS - CLUSTER, INVASIVENESS, AND DRIVER GROUP
+# =======================
+library(patchwork)
 
 betas <- readRDS(file.path("data", PED_BETAS))
 
 ss_ref <- ss %>%
-  filter(Batch == "REF", Primary_Include_In_Analysis == 1)
-
+  filter(Batch == "REF", Lymph_Node == "F")
 betas_ref <- betas[, ss_ref$IDAT]
 ss_ref$Global_Means <- colMeans(betas_ref)
 
-long_df <- bind_rows(
-  ss_ref %>%
-    mutate(Grouping = "Invasiveness",
-           Group = Clinical_Invasiveness),
-  
-  ss_ref %>%
-    mutate(Grouping = "Cluster",
-           Group = CC_Cluster),
-  
-  ss_ref %>%
-    filter(Driver_Group != "Indeterminate") %>%
-    mutate(Grouping = "Driver",
-           Group = Driver_Group)
-) %>%
-  filter(!is.na(Group))
-p_all <- ggplot(long_df,
-                aes(x = Group, y = Global_Means, fill = Group)) +
-  geom_boxplot(outlier.shape = NA, alpha = 0.85) +
-  geom_jitter(width = 0.15, size = 0.8, alpha = 0.5) +
-  facet_wrap(~Grouping, scales = "free_x") +
-  scale_fill_manual(values = c(
-    invasiveness_colors,
-    cluster_colors,
-    driver_colors
-  )) +
-  theme_minimal() +
-  theme(
-    strip.text = element_text(size = 12, face = "bold"),
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    legend.position = "none"
-  ) +
-  labs(y = "Global Mean DNA Methylation",
-       x = NULL)
-
-ggsave(file.path("figures", "all_primary_globalmeans.pdf"),
-       p_all, width = 6, height = 3)
-
-
-
-
-
-
-
-
-library(patchwork)
-
-p_inv <- ggplot(
-  ss_ref,
-  aes(x = Clinical_Invasiveness, y = Global_Means, fill = Clinical_Invasiveness)
-) +
+p_inv <- ggplot(ss_ref, aes(x = Clinical_Invasiveness, y = Global_Means, fill = Clinical_Invasiveness)) +
   geom_boxplot(outlier.shape = NA) +
   geom_jitter(width = 0.15, size = 0.8, alpha = 0.5) +
   scale_fill_manual(values = invasiveness_colors) +
@@ -155,17 +102,13 @@ p_inv <- ggplot(
   theme_minimal() +
   theme(legend.position = "none")
 
-p_cluster <- ggplot(
-  ss_ref,
-  aes(x = CC_Cluster, y = Global_Means, fill = CC_Cluster)
-) +
+p_cluster <- ggplot(ss_ref, aes(x = CC_Cluster, y = Global_Means, fill = CC_Cluster)) +
   geom_boxplot(outlier.shape = NA) +
   geom_jitter(width = 0.15, size = 0.8, alpha = 0.5) +
   scale_fill_manual(values = cluster_colors) +
   labs(title = "Cluster", x = NULL, y = NULL) +
   theme_minimal() +
-  theme(legend.position = "none",
-        axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(legend.position = "none", axis.text.x = element_text(angle = 45, hjust = 1))
 
 p_driver <- ss_ref %>%
   filter(Driver_Group != "Indeterminate") %>%
@@ -175,411 +118,111 @@ p_driver <- ss_ref %>%
   scale_fill_manual(values = driver_colors) +
   labs(title = "Driver", x = NULL, y = NULL) +
   theme_minimal() +
-  theme(legend.position = "none",
-        axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(legend.position = "none", axis.text.x = element_text(angle = 45, hjust = 1))
 
-library(patchwork)
-
-combined <- wrap_plots(
-  p_inv, p_cluster, p_driver,
-  nrow = 1,
-  widths = c(1, 1.5, 2)  # relative widths
-)
+combined <- wrap_plots(p_inv, p_cluster, p_driver, nrow = 1, widths = c(1, 1.5, 2))
 
 ggsave("figures/primary_globalmeans_combined.pdf", combined, width = 7, height = 3.5)
 
 
 # ========================
-# GLOBAL MEANS - INVASIVENESS
+# PROBE SUCCESS RATE VS. CONFIDENCE OF ALL CLASSIFIERS 
 # ========================
-betas <- readRDS(file.path("data", PED_BETAS))
+make_plot <- function(df, acc_col, conf_col, title = NULL) {
+  stopifnot(acc_col %in% colnames(df))
+  stopifnot(conf_col %in% colnames(df))
+  
+  acc_raw <- df[[acc_col]]
+  conf_raw <- df[[conf_col]]
+  
+  if (!is.numeric(conf_raw)) {
+    suppressWarnings(conf_num <- as.numeric(conf_raw))
+    if (all(is.na(conf_num))) {
+      stop(conf_col, " could not be coerced to numeric.")
+    }
+  } else {
+    conf_num <- conf_raw
+  }
+  
+  if (is.logical(acc_raw)) {
+    acc_chr <- ifelse(acc_raw, "Incorrect", "Correct")
+  } else if (is.numeric(acc_raw)) {
+    if (!all(na.omit(acc_raw) %in% c(0,1))) stop(acc_col, " must contain only 0/1.")
+    acc_chr <- ifelse(acc_raw == 1, "Incorrect", "Correct")
+  } else if (is.character(acc_raw)) {
+    acc_chr <- case_when(
+      tolower(acc_raw) %in% c("0","correct") ~ "Correct",
+      tolower(acc_raw) %in% c("1","incorrect") ~ "Incorrect",
+      TRUE ~ NA_character_
+    )
+    if (all(is.na(acc_chr))) stop(acc_col, " has invalid values. Expected 0/1 or Correct/Incorrect.")
+  } else {
+    stop(acc_col, " must be logical, numeric, or character.")
+  }
+  
+  df2 <- tibble(acc_bin = acc_chr, conf_val = conf_num) %>%
+    filter(!is.na(acc_bin), !is.na(conf_val))
+  
+  
+  wilcox_res <- wilcox.test(conf_val ~ acc_bin, data = df2, alternative = "greater", exact = FALSE)
+  
+  p_label <- if (wilcox_res$p.value < 0.001) {
+    "p < 0.001"
+  } else {
+    sprintf("p = %.3f", wilcox_res$p.value)
+  }
+  
+  ggplot(df2, aes(x = acc_bin, y = conf_val, fill = acc_bin)) +
+    geom_boxplot(outlier.alpha = 0) +
+    geom_jitter(width = 0.15, alpha = 0.5, size = 1) +
+    annotate("text", x = 1.5, y = 0.95, label = p_label, size = 3.5) +
+    scale_fill_manual(values = c("Correct"="#4DAF4A","Incorrect"="#E41A1C")) +
+    scale_y_continuous(limits = c(0,1), breaks = seq(0,1,0.25)) +
+    labs(x = NULL, y = "Prediction Confidence", title = title) +
+    theme_minimal(base_size = 12) +
+    theme( legend.position = "none", plot.title = element_text(size = 11, face = "bold", hjust = 0.5))
+}
 
-ss_primary <- ss %>%
-  filter(Batch == "REF", Primary_Include_In_Analysis == 1) %>%
-  mutate(CC_Cluster = droplevels(CC_Cluster))
+ss_ref <- read_excel(file.path("ss", PED_META)) %>%
+  filter(Batch == "REF", Lymph_Node == "F")
 
-betas1 <- betas[, ss_primary$IDAT]
-ss_primary$Global_Means <- colMeans(betas1)
-
-sigC <- get_sig_comparisons(ss_primary, "Clinical_Invasiveness", "Global_Means")
-
-p_S2C <- plot_group_box(
-  df = ss_primary,
-  group_var = "Clinical_Invasiveness",
-  value_var = "Global_Means",
-  fill_vals = invasiveness_colors,
-  sig_comps = sigC
+p1 <- make_plot(
+  df = ss_ref,
+  acc_col = "LOOCV_Invasiveness_Accuracy",
+  conf_col = "LOOCV_Invasiveness_Confidence",
+  title = "Reference – Invasiveness"
 )
 
-ggsave(file.path("figures", "primary_globalmeans_inv_wc.pdf"),
-       p_S2C, width = 3, height = 4.5)
+ss_val <- read_excel(file.path("ss", PED_META)) %>%
+  filter(Batch == "VAL", Lymph_Node == "F")
 
-ss_primary %>%
-  dplyr::group_by(Clinical_Invasiveness) %>%
-  dplyr::summarize(
-    n = sum(!is.na(Global_Means)),
-    median = median(Global_Means, na.rm = TRUE),
-    q1 = quantile(Global_Means, 0.25, na.rm = TRUE),
-    q3 = quantile(Global_Means, 0.75, na.rm = TRUE),
-    IQR = IQR(Global_Means, na.rm = TRUE),
-    min = min(Global_Means, na.rm = TRUE),
-    max = max(Global_Means, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-# ========================
-# GLOBAL MEANS - CLUSTER
-# ========================
-betas <- readRDS(file.path("data", PED_BETAS))
-
-ss_primary <- ss %>%
-  filter(Batch == "REF", Primary_Include_In_Analysis == 1) %>%
-  mutate(CC_Cluster = droplevels(CC_Cluster))
-
-betas1 <- betas[, ss_primary$IDAT]
-ss_primary$Global_Means <- colMeans(betas1)
-
-sigC <- get_sig_comparisons(ss_primary, "CC_Cluster", "Global_Means")
-
-p_S2C <- plot_group_box(
-  df = ss_primary,
-  group_var = "CC_Cluster",
-  value_var = "Global_Means",
-  fill_vals = cluster_colors,
-  sig_comps = sigC
+p2 <- make_plot(
+  df = ss_val,
+  acc_col = "Fmodel_Invasiveness_Accuracy",
+  conf_col = "Fmodel_Invasiveness_Confidence",
+  title = "Validation – Invasiveness"
 )
 
-ggsave(file.path("figures", "primary_globalmeans_cluster_wc.pdf"),
-       p_S2C, width = 4, height = 4.5)
+ss_ref <- ss_ref %>% filter(Driver_Group != "Indeterminate")
+ss_val <- ss_val %>% filter(Driver_Group != "Indeterminate")
 
-ss_primary %>%
-  dplyr::group_by(CC_Cluster) %>%
-  dplyr::summarize(
-    n = sum(!is.na(Global_Means)),
-    median = median(Global_Means, na.rm = TRUE),
-    q1 = quantile(Global_Means, 0.25, na.rm = TRUE),
-    q3 = quantile(Global_Means, 0.75, na.rm = TRUE),
-    IQR = IQR(Global_Means, na.rm = TRUE),
-    min = min(Global_Means, na.rm = TRUE),
-    max = max(Global_Means, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-
-# ========================
-# FIG S2D. GLOBAL MEANS BY DRIVER GROUP
-# ========================
-ss_driver <- ss %>%
-  filter(
-    Batch == "REF",
-    Primary_Include_In_Analysis == 1,
-    Driver_Group != "Indeterminate"
-  ) %>%
-  mutate(Driver_Group = factor(Driver_Group))
-
-betas2 <- betas[, ss_driver$IDAT]
-ss_driver$Global_Means <- colMeans(betas2)
-
-sigD <- get_sig_comparisons(ss_driver, "Driver_Group", "Global_Means")
-
-p_S2D <- plot_group_box(
-  df = ss_driver,
-  group_var = "Driver_Group",
-  value_var = "Global_Means",
-  fill_vals = driver_colors,
-  sig_comps = sigD
+p3 <- make_plot(
+  df = ss_ref,
+  acc_col = "LOOCV_Driver_Accuracy",
+  conf_col = "LOOCV_Driver_Confidence",
+  title = "Reference – Driver"
 )
 
-ggsave(file.path("figures", "primary_globalmeans_driver_wc.pdf"),
-       p_S2D, width = 4, height = 4.5)
-
-ss_primary %>%
-  dplyr::group_by(Driver_Group) %>%
-  dplyr::summarize(
-    n = sum(!is.na(Global_Means)),
-    median = median(Global_Means, na.rm = TRUE),
-    q1 = quantile(Global_Means, 0.25, na.rm = TRUE),
-    q3 = quantile(Global_Means, 0.75, na.rm = TRUE),
-    IQR = IQR(Global_Means, na.rm = TRUE),
-    min = min(Global_Means, na.rm = TRUE),
-    max = max(Global_Means, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-# ============================================================
-# STATS FOR PAPER
-# ============================================================
-ss <- read_excel(file.path("ss", PED_META)) %>% 
-  filter(LN_Include_In_Analysis == 1)
-
-ss$Clinical_Invasiveness <- as.factor(ss$Clinical_Invasiveness)
-ss$Clinical_Confidence <- as.factor(ss$Clinical_Confidence)
-ss$Fmodel_Invasiveness_Predicted <- as.factor(ss$Fmodel_Invasiveness_Predicted)
-ss$Fmodel_Invasiveness_Confidence <- as.numeric(ss$Fmodel_Invasiveness_Confidence)
-ss$Fmodel_Invasiveness_Accuracy <- as.numeric(ss$Fmodel_Invasiveness_Accuracy)
-ss$Fmodel_Driver_Predicted <- as.factor(ss$Fmodel_Driver_Predicted)
-ss$Fmodel_Driver_Confidence <- as.numeric(ss$Fmodel_Driver_Confidence)
-ss$Fmodel_Driver_Accuracy <- as.numeric(ss$Fmodel_Driver_Accuracy)
-ss$Lymph_Node <- as.factor(ss$Lymph_Node)
-ss$Chronological_Age <- as.numeric(ss$Chronological_Age)
-ss$M <- as.factor(ss$M)
-ss$N <- as.factor(ss$N)
-ss$`T` <- as.factor(ss$`T`)
-ss$Tissue_Type <- as.factor(ss$Tissue_Type)
-ss$Batch <- as.factor(ss$Batch)
-ss$Probe_Success_Rate <- as.numeric(ss$Probe_Success_Rate)
-ss$IC_EpiDISH <- as.numeric(ss$IC_EpiDISH)
-ss$CC_Cluster <- as.factor(ss$CC_Cluster)
-
-length(unique(ss$Sample_ID)) #184
-ss$Patient_ID <- substr(ss$Sample_ID, 1, 7)
-length(unique(ss$Patient_ID)) #169
-
-ss %>% filter(LN_Include_In_Analysis == 1) %>% select(Batch) %>% table()
-
-ss %>% filter(LN_Include_In_Analysis == 1, Batch == "REF") %>% select(Tissue_Type) %>% table()
-ss %>% filter(LN_Include_In_Analysis == 1, Batch == "VAL") %>% select(Tissue_Type) %>% table()
-
-ss %>% filter(Batch == "REF", Primary_Include_In_Analysis == 1) %>% select(Sex) %>% table()
-ss %>% filter(Batch == "VAL", Primary_Include_In_Analysis == 1) %>% select(Sex) %>% table()
-ss %>% filter(Batch == "REF", LN_Include_In_Analysis == 1, Lymph_Node == "T") %>% select(Sex) %>% table()
-ss %>% filter(Batch == "VAL", LN_Include_In_Analysis == 1, Lymph_Node == "T") %>% select(Sex) %>% table()
-
-
-ss %>% filter(Primary_Include_In_Analysis == 1, Batch == "REF") %>%
-  summarize(
-    mean = mean(Chronological_Age),
-    sd = sd(Chronological_Age, na.rm = TRUE),
-    min = min(Chronological_Age),
-    max = max(Chronological_Age)
-  )
-ss %>%
-  filter(Batch == "VAL", Primary_Include_In_Analysis == 1) %>%
-  summarize(
-    mean = mean(Chronological_Age),
-    sd = sd(Chronological_Age, na.rm = TRUE),
-    min = min(Chronological_Age),
-    max = max(Chronological_Age)
-  )
-
-ss_primary %>%
-  dplyr::summarize(
-    n = sum(!is.na(Horvath_MethylClock)),
-    median = median(Horvath_MethylClock, na.rm = TRUE),
-    q1 = quantile(Horvath_MethylClock, 0.25, na.rm = TRUE),
-    q3 = quantile(Horvath_MethylClock, 0.75, na.rm = TRUE),
-    min = min(Horvath_MethylClock, na.rm = TRUE),
-    max = max(Horvath_MethylClock, na.rm = TRUE),
-    .groups = "drop"
-  )
-ss_primary %>%
-  dplyr::summarize(
-    n = sum(!is.na(Chronological_Age)),
-    median = median(Chronological_Age, na.rm = TRUE),
-    q1 = quantile(Chronological_Age, 0.25, na.rm = TRUE),
-    q3 = quantile(Chronological_Age, 0.75, na.rm = TRUE),
-    min = min(Chronological_Age, na.rm = TRUE),
-    max = max(Chronological_Age, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-ss %>% filter(Primary_Include_In_Analysis == 1, Batch == "REF") %>% select(Histology_General) %>% table()
-ss %>% filter(Lymph_Node == "T", Batch == "REF") %>% select(Histology_General) %>% table()
-ss %>% filter(Primary_Include_In_Analysis == 1, Batch == "VAL") %>% select(Histology_General) %>% table()
-ss %>% filter(Lymph_Node == "T", Batch == "VAL") %>% select(Histology_General) %>% table()
-
-ss %>% filter(Batch == "REF", Primary_Include_In_Analysis == 1) %>% select(Clinical_Invasiveness) %>% table()
-ss %>% filter(Batch == "VAL", Primary_Include_In_Analysis == 1) %>% select(Clinical_Invasiveness) %>% table()
-ss %>% filter(Batch == "REF", LN_Include_In_Analysis == 1, Lymph_Node == "T") %>% select(Clinical_Invasiveness) %>% table()
-ss %>% filter(Batch == "VAL", LN_Include_In_Analysis == 1, , Lymph_Node == "T") %>% select(Clinical_Invasiveness) %>% table()
-
-
-ss %>% filter(Batch == "REF", Primary_Include_In_Analysis == 1) %>% select(Tissue_Type) %>% table()
-ss %>% filter(Batch == "VAL", Primary_Include_In_Analysis == 1) %>% select(Tissue_Type) %>% table()
-ss %>% filter(Batch == "REF", LN_Include_In_Analysis == 1, Lymph_Node == "T") %>% select(Tissue_Type) %>% table()
-ss %>% filter(Batch == "VAL", LN_Include_In_Analysis == 1, , Lymph_Node == "T") %>% select(Tissue_Type) %>% table()
-
-
-ss %>% filter(Batch == "REF", Primary_Include_In_Analysis == 1) %>% select(Clinical_Confidence) %>% table()
-ss %>% filter(Batch == "VAL", Primary_Include_In_Analysis == 1) %>% select(Clinical_Confidence) %>% table()
-ss %>% filter(Batch == "REF", LN_Include_In_Analysis == 1, Lymph_Node == "T") %>% select(Clinical_Confidence) %>% table()
-ss %>% filter(Batch == "VAL", LN_Include_In_Analysis == 1, , Lymph_Node == "T") %>% select(Clinical_Confidence) %>% table()
-
-ss %>% filter(Batch == "REF", Primary_Include_In_Analysis == 1) %>% select(Driver_Group) %>% table()
-ss %>% filter(Batch == "VAL", Primary_Include_In_Analysis == 1) %>% select(Driver_Group) %>% table()
-ss %>% filter(Batch == "REF", LN_Include_In_Analysis == 1, Lymph_Node == "T") %>% select(Driver_Group) %>% table()
-ss %>% filter(Batch == "VAL", LN_Include_In_Analysis == 1, , Lymph_Node == "T") %>% select(Driver_Group) %>% table()
-
-ss %>% filter(Batch == "REF", Primary_Include_In_Analysis == 1) %>% select(T) %>% table()
-ss %>% filter(Batch == "VAL", Primary_Include_In_Analysis == 1) %>% select(T) %>% table()
-ss %>% filter(Batch == "REF", LN_Include_In_Analysis == 1, Lymph_Node == "T") %>% select(T) %>% table()
-ss %>% filter(Batch == "VAL", LN_Include_In_Analysis == 1, Lymph_Node == "T") %>% select(T) %>% table()
-
-ss %>% filter(Batch == "REF", Primary_Include_In_Analysis == 1) %>% select(N) %>% table()
-ss %>% filter(Batch == "VAL", Primary_Include_In_Analysis == 1) %>% select(N) %>% table()
-ss %>% filter(Batch == "REF", LN_Include_In_Analysis == 1, Lymph_Node == "T") %>% select(N) %>% table()
-ss %>% filter(Batch == "VAL", LN_Include_In_Analysis == 1, Lymph_Node == "T") %>% select(N) %>% table()
-
-ss %>% filter(Batch == "REF", Primary_Include_In_Analysis == 1) %>% select(M) %>% table()
-ss %>% filter(Batch == "VAL", Primary_Include_In_Analysis == 1) %>% select(M) %>% table()
-ss %>% filter(Batch == "REF", LN_Include_In_Analysis == 1, Lymph_Node == "T") %>% select(M) %>% table()
-ss %>% filter(Batch == "VAL", LN_Include_In_Analysis == 1, Lymph_Node == "T") %>% select(M) %>% table()
-
-ss %>% filter(Batch == "REF", Primary_Include_In_Analysis == 1, M == "M1") %>% select(N) %>% table()
-ss %>% filter(Batch == "VAL", Primary_Include_In_Analysis == 1,  M == "M1") %>% select(N) %>% table()
-ss %>% filter(Batch == "REF", LN_Include_In_Analysis == 1, Lymph_Node == "T") %>% select(N) %>% table()
-ss %>% filter(Batch == "VAL", LN_Include_In_Analysis == 1, , Lymph_Node == "T") %>% select(N) %>% table()
-
-
-
-tab_ref <- ss %>%
-  dplyr::filter(Batch == "REF", Primary_Include_In_Analysis == 1) %>%
-  dplyr::pull(Driver_Group) %>%
-  table()
-cbind(
-  Count = tab_ref,
-  Proportion = prop.table(tab_ref)
+p4 <- make_plot(
+  df = ss_val,
+  acc_col = "Fmodel_Driver_Accuracy",
+  conf_col = "Fmodel_Driver_Confidence",
+  title = "Validation – Driver"
 )
 
-tab_ref <- ss %>%
-  dplyr::filter(Batch == "VAL", Primary_Include_In_Analysis == 1) %>%
-  dplyr::pull(Driver_Group) %>%
-  table()
-cbind(
-  Count = tab_ref,
-  Proportion = prop.table(tab_ref)
-)
+final_plot <- p1 | p2 | p3 | p4
 
-# PSR 
-ss %>%
-  dplyr::filter(Batch == "REF", LN_Include_In_Analysis == "1") %>%
-  dplyr::summarize(
-    mean = mean(Probe_Success_Rate, na.rm = TRUE),
-    sd   = sd(Probe_Success_Rate, na.rm = TRUE),
-    min  = min(Probe_Success_Rate, na.rm = TRUE),
-    q1   = quantile(Probe_Success_Rate, 0.25, na.rm = TRUE),
-    q3   = quantile(Probe_Success_Rate, 0.75, na.rm = TRUE),
-    max  = max(Probe_Success_Rate, na.rm = TRUE)
-  )
-ss %>%
-  dplyr::filter(Batch == "VAL", LN_Include_In_Analysis == "1") %>%
-  dplyr::summarize(
-    mean = mean(Probe_Success_Rate, na.rm = TRUE),
-    sd   = sd(Probe_Success_Rate, na.rm = TRUE),
-    min  = min(Probe_Success_Rate, na.rm = TRUE),
-    q1   = quantile(Probe_Success_Rate, 0.25, na.rm = TRUE),
-    q3   = quantile(Probe_Success_Rate, 0.75, na.rm = TRUE),
-    max  = max(Probe_Success_Rate, na.rm = TRUE)
-  )
+ggsave(filename = file.path("figures", "all_accuracy_vs_confidence.pdf"), plot = final_plot, width = 10, height = 4)
 
-
-# ACCURACIES FROM FINAL MODEL for validation cohort
-inv <- ss %>% filter(Batch == "VAL", Primary_Include_In_Analysis == "1") #85
-dri <- inv %>% filter(Driver_Group != "Indeterminate") #78
-dim(inv)
-dim(dri)
-
-# invasiveness wrong
-wrong_inv <- inv %>% filter(Fmodel_Invasiveness_Accuracy == 1)
-wrong_inv %>% select(Tissue_Type) %>% table()
-wrong_inv %>% select(Clinical_Invasiveness) %>% table()
-wrong_inv %>% filter(Clinical_Invasiveness == "High") %>%
-  select(Driver_Group) %>% table()
-wrong_inv %>% filter(Clinical_Invasiveness == "Low") %>%
-  select(Driver_Group) %>% table()
-
-right_inv <- inv %>% filter(Fmodel_Invasiveness_Accuracy == 0)
-right_inv %>% select(Tissue_Type) %>% table()
-
-wrong_inv %>% select(Clinical_Invasiveness) %>% table()
-wrong_inv %>%
-  summarize(
-    accuracy = mean(IC_EpiDISH, na.rm = TRUE),
-    sd = sd(as.numeric(IC_EpiDISH), na.rm = TRUE),
-    min = min(IC_EpiDISH, na.rm = TRUE),
-    max = max(IC_EpiDISH, na.rm = TRUE)
-  )
-right_inv %>%
-  summarize(
-    accuracy = mean(IC_EpiDISH, na.rm = TRUE),
-    sd = sd(as.numeric(IC_EpiDISH), na.rm = TRUE),
-    min = min(IC_EpiDISH, na.rm = TRUE),
-    max = max(IC_EpiDISH, na.rm = TRUE)
-  )
-
-# driver wrong
-dri %>% select(Fmodel_Driver_Accuracy) %>% table()
-wrong_dri <- dri %>% filter(Fmodel_Driver_Accuracy == 1)
-wrong_dri %>% select(Tissue_Type) %>% table()
-
-right_dri <- dri %>% filter(Fmodel_Driver_Accuracy == 0)
-right_dri %>% select(Tissue_Type) %>% table()
-
-wrong_dri %>% select(Driver_Group) %>% table()
-wrong_dri %>%
-  summarize(
-    accuracy = mean(IC_EpiDISH, na.rm = TRUE),
-    sd = sd(as.numeric(IC_EpiDISH), na.rm = TRUE),
-    min = min(IC_EpiDISH, na.rm = TRUE),
-    max = max(IC_EpiDISH, na.rm = TRUE)
-  )
-right_dri %>%
-  summarize(
-    accuracy = mean(IC_EpiDISH, na.rm = TRUE),
-    sd = sd(as.numeric(IC_EpiDISH), na.rm = TRUE),
-    min = min(IC_EpiDISH, na.rm = TRUE),
-    max = max(IC_EpiDISH, na.rm = TRUE)
-  )
-
-# ============================================================
-# ADULT STATS
-# ============================================================
-ss <- as.data.frame(read_excel(file.path("ss", ADT_META)))
-
-length(unique(ss$Sample_ID)) # 499
-length(unique(ss$Patient_ID)) # 449 
-
-ss %>% filter(Lymph_Node == "F") %>%
-  summarize(
-    mean = mean(Chronological_Age),
-    sd = sd(Chronological_Age, na.rm = TRUE),
-    min = min(Chronological_Age),
-    max = max(Chronological_Age)
-  )
-
-ss %>% filter(Lymph_Node == "F") %>% select(Histology_General) %>% table()
-ss %>% filter(Lymph_Node == "F") %>% select(Clinical_Invasiveness) %>% table()
-ss %>% filter(Lymph_Node == "F") %>% select(Driver_Group) %>% table()
-
-tab_ref <- ss %>%
-  dplyr::filter(Lymph_Node == "F") %>%
-  dplyr::pull(Driver_Group) %>%
-  table()
-cbind(
-  Count = tab_ref,
-  Proportion = prop.table(tab_ref)
-)
-
-ss %>% filter(Lymph_Node == "F") %>% 
-  dplyr::summarize(
-    n = sum(!is.na(Chronological_Age)),
-    median = median(Chronological_Age, na.rm = TRUE),
-    q1 = quantile(Chronological_Age, 0.25, na.rm = TRUE),
-    q3 = quantile(Chronological_Age, 0.75, na.rm = TRUE),
-    min = min(Chronological_Age, na.rm = TRUE),
-    max = max(Chronological_Age, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-ss %>% filter(Lymph_Node == "F") %>% 
-  dplyr::summarize(
-    n = sum(!is.na(Horvath_MethylClock)),
-    median = median(Horvath_MethylClock, na.rm = TRUE),
-    q1 = quantile(Horvath_MethylClock, 0.25, na.rm = TRUE),
-    q3 = quantile(Horvath_MethylClock, 0.75, na.rm = TRUE),
-    min = min(Horvath_MethylClock, na.rm = TRUE),
-    max = max(Horvath_MethylClock, na.rm = TRUE),
-    .groups = "drop"
-  )
 
 

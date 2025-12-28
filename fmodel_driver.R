@@ -1,18 +1,15 @@
 # ============================================================
-#   FIG 4.
 #   This script trains the final RF classifier for
 #   predicting driver group in thyroid cancer samples
-#   using DNA methylation data.
+#   using DNA methylation data and tests on validation cohort. 
 # ============================================================
-TARGET <- "Driver_Group"
 BATCH_SIZE <- 10000
 N_TREES <- 1000
 N_FEATURES <- 3000
 
 source("config.R")
 
-BASE_DIR <- "/home/lijz/labprojects/20250721_Jenny/thyroid"
-model_suffix <- if (TARGET == "Clinical_Invasiveness") "invasiveness" else "driver"
+model_suffix <- "driver"
 base_name <- tools::file_path_sans_ext(PED_BETAS)
 
 MODEL_DIR <- file.path(BASE_DIR, "data", paste0("fmodel_", model_suffix, "_", base_name, "_all_samples"))
@@ -30,15 +27,13 @@ ss <- ss[ss[[TARGET]] != "Indeterminate", ]
 
 betas <- readRDS(file.path("data", PED_BETAS))
 
-# split into train and test
+# split into train and test 
 ss_train <- ss %>%
   dplyr::filter(Batch == 'REF') %>% 
-  filter(Primary_Include_In_Analysis == "1")
-
+  filter(Lymph_Node == "F")
 ss_test <- ss %>%
-  filter(!(Batch == 'REF' & Primary_Include_In_Analysis == "1"))
+  filter(!(Batch == 'REF' & Lymph_Node == "F"))
 
-# Match samples
 samples_train <- intersect(colnames(betas), ss_train$IDAT)
 betas_train <- betas[, samples_train]
 ss_train <- ss_train[match(samples_train, ss_train$IDAT), ]
@@ -89,7 +84,6 @@ saveRDS(fold_importance, file.path(TRAIN_DIR, "fold_importance.rds"))
 # ========================
 # TRAIN FINAL MODEL
 # ========================
-ranked_features <- readRDS(file.path("data", "fmodel_driver_ped_betas_QCDPB_prc_all_samples", "train", "ranked_features.rds"))
 sel_probes <- ranked_features[1:N_FEATURES]
 train_betas_sel <- betas_train[sel_probes, ]
 
@@ -151,10 +145,10 @@ ss$Fmodel_Driver_Prediction <- factor(
 write_xlsx(ss, file.path("ss", "ped_fmodel_driver_ss.xlsx"))
 
 ss_val <- ss %>% 
-  filter(Primary_Include_In_Analysis == "1", Batch == "VAL", Lymph_Node == "F")
+  filter(Batch == "VAL", Lymph_Node == "F")
 
 ss_ln <- ss %>% 
-  filter(LN_Include_In_Analysis == "1", Lymph_Node == "T")
+  filter(Lymph_Node == "T")
 
 cm_val <- confusionMatrix(data = ss_val$Fmodel_Driver_Prediction, reference = ss_val$Driver_Group)
 print(cm_val)
@@ -192,12 +186,11 @@ print(cm_val)
 # Balanced Accuracy               0.8143       0.75000               0.8527          0.9701
 
 
-wrong <- ss_val %>% filter(Fmodel_Driver_Accuracy == 1, Lymph_Node == "F", Driver_Group != "Indeterminate") %>% 
-  select(Fmodel_Driver_Prediction, Driver_Group, Sample_ID)
-
+wrong <- ss_val %>% filter(Fmodel_Driver_Accuracy == 1, Lymph_Node == "F", Driver_Group != "Indeterminate")
 
 ### LYMPH NODE EVALUATION 
 cm_ln <- confusionMatrix(data = ss_ln$Fmodel_Driver_Prediction, reference = ss_ln$Driver_Group)
+print(cm_ln)
 # Reference
 # Prediction      BRAF V600E DICER1 Kinase Fusion Ras-like
 # BRAF V600E             2      0             0        0
@@ -205,11 +198,8 @@ cm_ln <- confusionMatrix(data = ss_ln$Fmodel_Driver_Prediction, reference = ss_l
 # Kinase Fusion          0      0            10        0
 # Ras-like               0      1             0        1
 
-print(cm_ln)
-ln_wrong <- ss_ln %>% filter(Fmodel_Driver_Accuracy == 1)
-
 # ========================
-# ONE V ALL CURVES
+# ONE V ALL ROC CURVES
 # ========================
 ss_val <- ss_val %>% left_join(results, by="IDAT")
 
@@ -225,12 +215,7 @@ roc_list_val <- list()
 roc_df_val <- data.frame()
 
 for (cls in driver_classes) {
-  roc_obj <- roc(
-    response  = ss_val$Driver_Group == cls,
-    predictor = ss_val[[cls]],
-    quiet = TRUE
-  )
-  
+  roc_obj <- roc(response  = ss_val$Driver_Group == cls, predictor = ss_val[[cls]], quiet = TRUE)
   roc_list_val[[cls]] <- roc_obj
   
   roc_df_val <- rbind(
@@ -252,30 +237,33 @@ auc_labels <- roc_df_val %>%
 p <- ggplot(roc_df_val, aes(FPR, TPR, color = Class)) +
   geom_line(size = 1) +
   geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "gray") +
-  scale_color_manual(
-    values = driver_colors,
-    labels = auc_labels$label
-  ) +
+  scale_color_manual(values = driver_colors, labels = auc_labels$label) +
   coord_equal() +
   theme_minimal() +
-  theme(
-    legend.position = "bottom",
-    legend.title = element_blank()
-  ) +
-  labs(
-    x = "False Positive Rate",
-    y = "True Positive Rate"
-  )
+  theme(legend.position = "bottom", legend.title = element_blank()) +
+  labs(x = "False Positive Rate", y = "True Positive Rate")
 
 pdf(file.path("figures", "val_driver_roc.pdf"), width = 5, height = 5)
 print(p)
 dev.off()
 
+
+# ========================
+# ENRICHMENT DOT PLOT - MOST IMPORTANT
+# ========================
+imp <- readRDS(file.path("data/fmodel_driver_ped_betas_QCDPB_prc_all_samples/train/ranked_features.rds"))
+
+sel_probes3k <- imp %>% head(3000)
+
+x <- testEnrichment(sel_probes3k, "TFBSconsensus", platform = "EPIC")
+pdf(file.path("figures", "fmodel_driver_enrichment_tfbs.pdf"),width = 2.8, height = 3.9, onefile=FALSE)
+plotDotFDR(x, n_min = 30, n_max = 30)
+dev.off()
+
+
 # ========================
 # ONE V ALL SHAP MODEL S
 # ========================
-
-# saveRDS(train_betas_sel, file.path("data", "train_betas_sel.rds"))
 train_betas_sel <- readRDS(file.path("data", "train_betas_sel.rds"))
 unique_classes <- levels(train_labels)
 
@@ -309,7 +297,7 @@ for (class_name in unique_classes) {
 }
 
 # ========================
-# 4E-H. SHAP PLOTS
+# SHAP PLOTS
 # ========================
 for (class_name in unique_classes) {
   clean <- clean_label(class_name)
@@ -330,133 +318,3 @@ for (class_name in unique_classes) {
   # plot(p)
   # dev.off()
 }
-
-# ========================
-# ACCURACY vs CONFIDENCE PLOTS
-# ========================
-analyze_accuracy_confidence(
-  df = ss_val,
-  accuracy_col = "Fmodel_Driver_Accuracy",
-  confidence_col = "Fmodel_Driver_Confidence",
-  x_label = "Driver Prediction",
-  output_file = file.path("figures", "driver_accuracy_vs_confidence.pdf")
-)
-
-# ========================
-# 4H. ENRICHMENT PLOT
-# ========================
-imp <- readRDS(file.path("data/fmodel_driver_ped_betas_QCDPB_prc_all_samples/train/ranked_features.rds"))
-
-sel_probes3k <- imp %>% head(3000)
-
-x <- testEnrichment(sel_probes3k, "TFBSconsensus", platform = "EPIC")
-pdf(file.path("figures", "fmodel_driver_enrichment_tfbs.pdf"),width = 2.8, height = 3.9, onefile=FALSE)
-plotDotFDR(x, n_min = 30, n_max = 30)
-dev.off()
-
-# ========================
-# INTERSECTING FEATURES SCATTER PLOT
-# ========================
-DRIV_DIR <- file.path(dir, "final_driver_model")
-INV_DIR <- file.path(dir, "final_invasiveness_model")
-head <- 30000
-
-imp_results_driver <- readRDS(file.path(DRIV_DIR, "fold_importance.rds"))
-imp_results_invasive <- readRDS(file.path(INV_DIR, "fold_importance.rds"))
-
-# Get top features
-top_driver_features <- imp_results_driver %>%
-  arrange(desc(MeanDecreaseAccuracy)) %>%
-  head(head) %>%
-  pull(Feature)
-top_invasive_features <- imp_results_invasive %>%
-  arrange(desc(MeanDecreaseAccuracy)) %>%
-  head(head) %>%
-  pull(Feature)
-
-# Find intersection and unique features
-common_features <- intersect(top_driver_features, top_invasive_features)
-driver_unique <- setdiff(top_driver_features, top_invasive_features)
-invasive_unique <- setdiff(top_invasive_features, top_driver_features)
-
-# Create a combined importance data frame
-combined_importance <- bind_rows(
-  imp_results_driver %>%
-    filter(Feature %in% c(common_features, driver_unique, invasive_unique)) %>%
-    group_by(Feature) %>%
-    summarize(Mean_Importance = mean(MeanDecreaseAccuracy, na.rm = TRUE)) %>%
-    mutate(Model = "Driver"),
-  imp_results_invasive %>%
-    filter(Feature %in% c(common_features, driver_unique, invasive_unique)) %>%
-    group_by(Feature) %>%
-    summarize(Mean_Importance = mean(MeanDecreaseAccuracy, na.rm = TRUE)) %>%
-    mutate(Model = "Invasiveness")
-)
-
-# Tag features as common or unique
-combined_importance <- combined_importance %>%
-  mutate(Feature_Type = case_when(
-    Feature %in% common_features ~ "Common",
-    Feature %in% driver_unique ~ "Driver-specific",
-    Feature %in% invasive_unique ~ "Invasiveness-specific"
-  ))
-
-# SCATTER PLOT
-importance_wide <- combined_importance %>%
-  pivot_wider(id_cols = Feature,
-              names_from = Model,
-              values_from = Mean_Importance) %>%
-  mutate(Feature_Type = case_when(
-    Feature %in% common_features ~ "Common",
-    Feature %in% driver_unique ~ "Driver-specific",
-    Feature %in% invasive_unique ~ "Invasiveness-specific"
-  ))
-
-# Replace NA with zeros for visualization
-importance_wide <- importance_wide %>%
-  mutate(
-    Driver = replace_na(Driver, 0),
-    Invasiveness = replace_na(Invasiveness, 0)
-  )
-
-p <- ggplot(importance_wide,
-            aes(x = Driver, y = Invasiveness, color = Feature_Type)) +
-  geom_point(alpha = 0.7, size = 1) +
-  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "gray50") +
-  scale_color_manual(values = feature_colors, name = "Feature Type") +
-  # Add labels for top features
-  geom_text_repel(
-    data = importance_wide %>%
-      filter(Driver > quantile(Driver, 0.9) |
-               Invasiveness > quantile(Invasiveness, 0.9)),
-    aes(label = Feature),
-    size = 3,
-    max.overlaps = 15,
-    box.padding = 0.5,
-    point.padding = 0.3,
-    segment.color = "gray50"
-  ) +
-  labs(
-    x = "Importance for Driver Classification",
-    y = "Importance for Invasiveness Classification"
-  ) +
-  theme_minimal() +
-  theme(
-    legend.position = "bottom",
-    panel.grid.major = element_line(color = "lightgray", size = 0.2),
-    panel.grid.minor = element_line(color = "lightgray", size = 0.1),
-    plot.title = element_text(face = "bold", size = 14),
-    plot.subtitle = element_text(size = 12),
-    axis.title = element_text(size = 12),
-    legend.title = element_text(size = 12)
-  )
-
-pdf(file.path(fig_dir, "fmodel_joint_importance_scatter.pdf"),
-    height = 5, width = 5)
-print(p)
-dev.off()
-
-
-
-
-

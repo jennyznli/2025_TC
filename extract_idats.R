@@ -12,11 +12,12 @@ if (length(args) != 3) {
 }
 
 # CONFIGS
+source("../config.R")
+
 DATASET_NAME <- args[1]
 PROCESSING <- args[2]
 MASK <- args[3]
 
-# Convert MASK argument to logical
 MASK_LOGICAL <- as.logical(MASK)
 if (is.na(MASK_LOGICAL)) {
     stop("Invalid mask value. Please use TRUE or FALSE.")
@@ -24,10 +25,6 @@ if (is.na(MASK_LOGICAL)) {
 
 CONFIG <- BiocParallel::SerialParam()
 
-cat("Processing dataset:", DATASET_NAME, "\n")
-
-# SET UP DIRECTORIES
-source("../config.R")
 IDAT_DIR <- file.path(BASE_DIR, "idat", DATASET_NAME)
 
 # LOAD BETAS
@@ -45,28 +42,19 @@ total_values <- prod(dim(betas))
 na_rate <- nas / total_values
 dim_vals <- dim(betas)
 
-# Construct output filename based on inputs
+# CREATE FILENAME BASED ON INPUTS
 mask_suffix <- ifelse(MASK_LOGICAL, "_mask", "")
 output_filename <- paste0(DATASET_NAME, "_betas_", PROCESSING, mask_suffix, ".rds")
 output_path <- file.path(DATA_DIR, output_filename)
 
-# Optional warning if file exists
-if (file.exists(output_path)) {
-    cat("Warning: File already exists and will be overwritten:", output_path, "\n")
-}
-
-# SAVE BETAS
 saveRDS(betas, output_path)
 cat("Saved beta values to:", output_filename, "\n")
 
 # ========================
 # FINAL SUMMARY
 # ========================
-cat("\n=== Processing Summary ===\n")
 cat("Dataset:", DATASET_NAME, "\n")
 cat("Samples:", dim_vals[2], "\n")
 cat("Probes:", dim_vals[1], "\n")
 cat("NAs:", nas, "\n")
 cat("Mask rate:", na_rate, "\n")
-
-cat("Processing completed successfully for dataset:", DATASET_NAME, "\n")

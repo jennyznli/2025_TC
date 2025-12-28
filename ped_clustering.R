@@ -1,22 +1,18 @@
-# FIG 1 
-# pca on 30k most variable
-# generates tsne coordinates for each subset 
-# performs consensus clustering 
-
-# ========================
-# LOAD DATA
-# ========================
+# ============================================================
+# Generates tSNE coordinates and performs consensus clustering 
+# for the pediatric cohort. 
+# ============================================================
 source("config.R")
 
 ss <- read_excel(file.path("ss", PED_META))
 
 # primary samples only  
-ss_primary_1 <- ss %>% dplyr::filter(Batch == "REF", Primary_Include_In_Analysis == 1)
-ss_primary_12 <- ss %>% dplyr::filter(Primary_Include_In_Analysis == 1)
+ss_primary_1 <- ss %>% dplyr::filter(Lymph_Node == "F", Batch == "REF")
+ss_primary_12 <- ss %>% dplyr::filter(Lymph_Node == "F")
 
 # primary samples w/ LN metastases 
-ss_all_1 <- ss %>% dplyr::filter(Batch == "REF", LN_Include_In_Analysis == 1)
-ss_all_12 <- ss %>% dplyr::filter(LN_Include_In_Analysis == 1)
+ss_all_1 <- ss %>% dplyr::filter(Batch == "REF")
+ss_all_12 <- ss
 
 pca <- readRDS(file.path("data", "ped_betas_QCDPB_prc_30000_pca.rds"))
 
@@ -33,7 +29,7 @@ pcs <- pca$x[, 1:num_pcs]
 write.csv(pcs, file.path("data", "ped_unmasked_pca_coords.csv"))
 
 # ========================
-# FINAL t-SNE
+# t-SNE EMBEDDINGS FOR DIFF COHORTS
 # ========================
 pcs <- read.csv(file.path("data", "ped_unmasked_pca_coords.csv"), row.names = 'X')
 
@@ -77,74 +73,8 @@ tsne_all_1  <- run_tsne(pcs[ss_all_1$IDAT, ], "ped_tsne_all_1")
 tsne_all_12 <- run_tsne(pcs[ss_all_12$IDAT, ], "ped_tsne_all_12")
 
 # ========================
-# CONSENSUS CLUSTERING - primary reference
+# CONSENSUS CLUSTERING
 # ========================
-ss <- read_excel(file.path("ss", PED_META))
-pcs <- t(read.csv(file.path("data", "ped_unmasked_pca_coords.csv"), row.names = 'X'))
-pcs <- pcs[, ss_primary_1$IDAT]
-
-set.seed(123)
-hc_res <- ConsensusClusterPlus::ConsensusClusterPlus(
-  d = pcs,
-  maxK = 10,
-  reps = 1000,
-  pItem = 1,
-  pFeature = 0.8,
-  clusterAlg = "hc",
-  distance = "euclidean",
-  seed = 123,
-  plot = "pdf",
-  writeTable = TRUE,
-  title = "ped87_hc_euc_pcs_1000r_1i_0.8f"
-)
-
-df <- as.data.frame(hc_res[[3]]$consensusClass)
-df$IDAT <- rownames(df)
-colnames(df) <- c("CC_Cluster", "IDAT")
-df$CC_Cluster <- factor(df$CC_Cluster, 
-                        levels = c(1, 2, 3),
-                        labels = c("LI", "HI", "LEUKO"))
-ss <- dplyr::left_join(ss, df, by = "IDAT")
-
-write_xlsx(ss, file.path("ss", "ped87_unmasked_consensus_clusters.xlsx"))
-
-
-# ========================
-# CONSENSUS CLUSTERING - reference
-# ========================
-ss <- read_excel(file.path("ss", PED_META))
-pcs <- read.csv(file.path("data", "ped_unmasked_pca_coords.csv"), row.names = 'X')
-pcs <- t(pcs)[, ss_all_1$IDAT]
-
-set.seed(123)
-hc_res <- ConsensusClusterPlus::ConsensusClusterPlus(
-  d = pcs,
-  maxK = 10,
-  reps = 1000,
-  pItem = 1.0,
-  pFeature = 0.8,
-  clusterAlg = "hc",
-  distance = "euclidean",
-  seed = 123,
-  plot = "pdf",
-  writeTable = TRUE,
-  title = "ped100_hc_euc_pcs_1000r_1i_0.8f"
-)
-
-df <- as.data.frame(hc_res[[3]]$consensusClass)
-df$IDAT <- rownames(df)
-colnames(df) <- c("CC_Cluster", "IDAT")
-df$CC_Cluster <- factor(df$CC_Cluster, 
-                        levels = c(1, 2, 3),
-                        labels = c("LI", "HI", "LEUKO"))
-ss <- dplyr::left_join(ss, df, by = "IDAT")
-
-write_xlsx(ss, file.path("ss", "ped100_unmasked_consensus_clusters.xlsx"))
-
-# ========================
-# CONSENSUS CLUSTERING - all REF & VAL 
-# ========================
-ss <- read_excel(file.path("ss", PED_META))
 pcs <- read.csv(file.path("data", "ped_unmasked_pca_coords.csv"), row.names = 'X')
 pcs <- t(pcs)[, ss_all_12$IDAT]
 
@@ -165,14 +95,11 @@ hc_res <- ConsensusClusterPlus::ConsensusClusterPlus(
 
 df <- as.data.frame(hc_res[[3]]$consensusClass)
 df$IDAT <- rownames(df)
-colnames(df) <- c("CC_Cluster", "IDAT")
-df$CC_Cluster <- factor(df$CC_Cluster, 
+colnames(df) <- c("Consensus_Cluster", "IDAT")
+df$Consensus_Cluster <- factor(df$Consensus_Cluster, 
                         levels = c(1, 2, 3),
                         labels = c("LI", "HI", "LEUKO"))
 ss <- dplyr::left_join(ss, df, by = "IDAT")
 write_xlsx(ss, file.path("ss", "ped184_unmasked_consensus_clusters.xlsx"))
-
-
-
 
 

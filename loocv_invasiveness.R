@@ -1,5 +1,4 @@
 # ============================================================
-#   FIG 4.
 #   This script performs leave-one-out cross validation (LOOCV)
 #   to develop and validate a random forest classifier for
 #   predicting clinical invasiveness in thyroid cancer samples
@@ -8,7 +7,7 @@
 N_WORKERS <- 20
 set.seed(123)
 
-BASE_DIR <- "/home/lijz/labprojects/20250721_Jenny/thyroid"
+source(("../config.R"))
 
 CL_DIR <- file.path(BASE_DIR, "data", "loocv_invasiveness_model")
 MODEL_DIR <- file.path(CL_DIR, "models")
@@ -21,8 +20,6 @@ dir.create(SUM_DIR, recursive = TRUE, showWarnings = FALSE)
 models_list <- list()
 pred_results <- data.frame()
 imp_results <- data.frame()
-
-source(("../config.R"))
 
 # ========================
 # FUNCTIONS
@@ -152,7 +149,7 @@ process_sample <- function(i, all_samples, betas, labels) {
 # MAIN EXECUTION
 # ========================
 ss <- read_excel(file.path("ss", PED_META))
-ss <- ss %>% filter(Lymph_Node == "F", Primary_Include_In_Analysis == 1)
+ss <- ss %>% filter(Lymph_Node == "F")
 betas <- readRDS(file.path("data", PED_BETAS))
 
 valid_ids <- intersect(ss$IDAT, colnames(betas))

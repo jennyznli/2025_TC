@@ -1,40 +1,18 @@
-# ==========================================
-# RNA ANALYSIS - FIG 2
-# ==========================================
-
+# ============================================================
+# Performs RNA analysis (differential expression) and GSEA. 
+# ============================================================
 source("config.R")
-library(limma)
 
 # ========================
 # LOADING DATA
 # ========================
-df <- read.csv(here("data", "20250113_rna_log2cpmfiltered.csv"), row.names = "GENEID")
+df <- read.csv(file.path("data", "20250113_rna_log2cpmfiltered.csv"), row.names = "GENEID")
 
 ss <- read_excel(file.path("ss", PED_META)) %>% 
-  filter(LN_Include_In_Analysis == "1", Lymph_Node == "F", Batch == "REF")
-ss_ln <- read_excel(file.path("ss", PED_META)) %>% 
-  filter(LN_Include_In_Analysis == "1", Batch == "REF")
-dim(ss)
-# 87 
-dim(ss_ln)
-# 100  
-
-matches <- (colnames(df) %in% ss_ln$Sample_ID)
-
-ss_ln$Sample_ID[!(ss_ln$Sample_ID %in% colnames(df))]
-# 6 missing: "THY0158T"    "THY0212LNax" "THY0212LN"   "THY0150T"  "THY0258LN" "THY0164T"   
-# 2 of these are the weird THY0212
-# name a random one THY0212LN and LNax ? 
-
-ss <- ss %>% filter(Sample_ID %in% colnames(df))
-ss_ln <- ss_ln %>% filter(Sample_ID %in% colnames(df))
-dim(ss)
-dim(ss_ln)
-# 84
-# 95
+  filter(Lymph_Node == "F", Batch == "REF")
 
 # ========================
-# DIFF EXPRESSION W/ COVARIATES
+# DIFF EXPRESSION
 # ========================
 primary <- df[, ss$Sample_ID]
 
@@ -43,16 +21,6 @@ ss$Sex <- factor(ss$Sex)
 ss$IC_EpiDISH <- as.numeric(ss$IC_EpiDISH)
 
 design <- model.matrix(~ Sex + IC_EpiDISH + Invasiveness, data = ss)
-
-print(table(ss$Invasiveness))
-# Low High 
-# 32   52 
-print(table(ss$Sex))
-# Female   Male 
-# 69     15 
-print(summary(ss$IC_EpiDISH))
-# Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
-# 0.08107 0.14021 0.19352 0.23212 0.23315 0.89131 
 
 fit <- lmFit(primary, design)
 fit2 <- eBayes(fit)
@@ -70,14 +38,13 @@ dim(deg_all_adjusted)
 
 n_sig <- sum(deg_all_adjusted$adj.P.Val < 0.05)
 cat("\nNumber of DE genes (FDR < 0.05): ", n_sig, "\n") # 6000
-# 6000
 
 cat("  Upregulated:   ", sum(deg_all_adjusted$adj.P.Val < 0.05 & deg_all_adjusted$logFC > 0), "\n")
 cat("  Downregulated: ", sum(deg_all_adjusted$adj.P.Val < 0.05 & deg_all_adjusted$logFC < 0), "\n")
 # 3637 
 # 2363 
 
-saveRDS(deg_all_adjusted, here("data", "deg_primary_covar_all.rds"))
+saveRDS(deg_all_adjusted, file.path("data", "deg_primary_covar_all.rds"))
 
 deg_stringent_adjusted <- deg_all_adjusted %>%
   filter(adj.P.Val < 0.05, abs(logFC) > 1)
@@ -86,18 +53,17 @@ cat("  Downregulated: ", sum(deg_stringent_adjusted$adj.P.Val < 0.05 & deg_strin
 # 1213 
 # 492 
 
-saveRDS(deg_stringent_adjusted, here("data", "deg_primary_covar_stringent.rds"))
+saveRDS(deg_stringent_adjusted, file.path("data", "deg_primary_covar_stringent.rds"))
 dim(deg_stringent_adjusted)
 
 deg_sig_adj <- deg_all_adjusted %>%
   filter(adj.P.Val < 0.05)
 dim(deg_sig_adj)
 # 6000
-saveRDS(deg_sig_adj, here("data", "deg_primary_covar_sig.rds"))
-
+saveRDS(deg_sig_adj, file.path("data", "deg_primary_covar_sig.rds"))
 
 # ========================
-# DIFF METH - EXTRACT TFBS
+# DIFFERENTIAL METHYLATION - TFBS
 # ========================
 logfc_threshold <- 1
 effect_threshold <- 0.05
@@ -120,12 +86,8 @@ length(tf_hypo)
 # 264 
 
 # ========================
-# DNA METH + DIFF EXPRESSION 
+# SCATTER PLOT - DIFF METH + DIFF EXPRESSION 
 # ========================
-### BH CORRECTION W/ UNCOLLAPSED PROBES (TO ANNOTATE)
-# res <- readRDS(here("data", "ped_dm_invasiveness_leuko_pr.rds"))
-# res$Clinical_InvasivenessHigh_BH <- p.adjust(res$Pval_Clinical_InvasivenessHigh, method = "BH")
-# saveRDS(res, file.path("data", "ped_dm_invasiveness_leuko_pr_bh.rds"))
 res <- readRDS(file.path("data", "ped_dm_invasiveness_leuko_pr_bh.rds"))
 sig_probes <- res %>%
   filter(Clinical_InvasivenessHigh_BH < fdr_threshold) %>%
@@ -206,38 +168,12 @@ p <- ggplot(tfbs, aes(x = logFC, y = mean_meth_delta)) +
     legend.position = "right"
   )
 
-pdf(here("figures", "tfbs_epigenetic_silencing.pdf"), width = 6, height = 5)
+pdf(file.path("figures", "tfbs_epigenetic_silencing.pdf"), width = 6, height = 5)
 print(p)
 dev.off()
 
-# # ========================
-# # VOLCANO PLOT
-# # ========================
-# deg_all$significant <- case_when(
-#   deg_all$adj.P.Val < 0.05 & deg_all$logFC > 1 ~ "Upregulated",
-#   deg_all$adj.P.Val < 0.05 & deg_all$logFC < -1 ~ "Downregulated",
-#   TRUE ~ "NS"
-# )
-# deg_all$gene <- rownames(deg_all)
-# 
-# pdf(here("figures", "rna_volcano.pdf"), width=5, height=6, onefile=FALSE)
-# volcano_plot <- ggplot(deg_all, aes(x = logFC, y = -log10(adj.P.Val))) +
-#   geom_point(aes(color = significant), alpha = 0.5, size = 0.5) +
-#   geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
-#   geom_vline(xintercept = c(-1, 1), linetype = "dashed") +
-#   scale_color_manual(values = c("Upregulated" = "#d61525ff", 
-#                                 "Downregulated" = "#0c66bcff", 
-#                                 "NS" = "grey80")) +
-#   theme_minimal() +
-#   labs(x = "log2 Fold Change",
-#        y = "-log10 Adjusted P-value",
-#        color = "")
-# print(volcano_plot)
-# dev.off()
-# 
-
 # ========================
-# FIG 2F. TF HEATMAP
+# HEATMAP - TF DIFF EXPRESSION 
 # ========================
 invasiveness <- factor(ss$Clinical_Invasiveness, levels = c("Low", "High"))
 
@@ -245,9 +181,6 @@ deg_hyper_expressed <- deg_stringent %>%
   filter(rownames(.) %in% tf_hyper)
 deg_hypo_expressed <- deg_stringent %>%
   filter(rownames(.) %in% tf_hypo)
-
-cat("DE genes in hypermethylated TFs:", nrow(deg_hyper_expressed), "\n")
-cat("DE genes in hypomethylated TFs:", nrow(deg_hypo_expressed), "\n")
 
 deg_tf_expr <- primary[unique(c(rownames(deg_hypo_expressed), rownames(deg_hyper_expressed))), ]
 
@@ -276,8 +209,8 @@ pheatmap(deg_tf_expr,
 )
 dev.off()
 
-s# ========================
-# FIG S2G. GSEA
+# ========================
+# GSEA
 # ========================
 deg_all <- readRDS(file.path(DATA_DIR, "diff_exp_genes.rds"))
 
@@ -318,8 +251,6 @@ gsea_results_filtered <- gsea_results %>%
       str_remove("^HALLMARK_") %>%
       str_replace_all("_", " ")
   )
-# saveRDS(gsea_results_filtered, file.path(DATA_DIR, "gsea_results_filtered.rds"))
-# gsea_results_filtered <- readRDS(file.path(DATA_DIR, "gsea_results_filtered.rds"))
 
 pdf(file.path(FIG_DIR, "gsea_enrichment_dot_hallmark.pdf"), width=6, height=4, onefile=FALSE)
 p <- ggplot(gsea_results_filtered,
@@ -341,69 +272,3 @@ p <- ggplot(gsea_results_filtered,
        y = "Pathway")
 plot(p)
 dev.off()
-
-# ========================
-# FIG S2G. GSEA
-# ========================
-library(fgsea)
-ranked_genes <- deg_all_adjusted %>%
-  mutate(
-    ranking_metric = -log10(P.Value) * sign(logFC),
-    gene_id = rownames(.)
-  ) %>%
-  arrange(desc(ranking_metric))
-
-gene_ranks <- setNames(ranked_genes$ranking_metric, ranked_genes$gene_id)
-h_sets <- msigdbr(species = "Homo sapiens", category = "H") %>%
-  dplyr::select(gs_name, gene_symbol) %>%
-  mutate(collection = "H")
-
-msig_list <- split(h_sets$gene_symbol, h_sets$gs_name)
-
-gsea_results <- fgsea(
-  pathways = msig_list,
-  stats = gene_ranks,
-  scoreType = 'std',
-  minSize = 15,
-  maxSize = 500,
-  nPermSimple = 10000,
-  eps = 0
-) %>%
-  as_tibble() %>%  #
-  arrange(padj)
-print(dim(gsea_results))
-# 50 8
-
-gsea_results_filtered <- gsea_results %>%
-  filter(padj < 0.1) %>%
-  arrange(desc(abs(NES))) %>%
-  slice_head(n = 20) %>%
-  mutate(
-    pathway = pathway %>%
-      str_remove("^HALLMARK_") %>%
-      str_replace_all("_", " ")
-  )
-# saveRDS(gsea_results_filtered, file.path(DATA_DIR, "gsea_results_filtered.rds"))
-# gsea_results_filtered <- readRDS(file.path(DATA_DIR, "gsea_results_filtered.rds"))
-pdf(file.path("figures", "gsea_enrichment_dot_hallmark.pdf"), width=6, height=4, onefile=FALSE)
-
-p <- ggplot(gsea_results_filtered,
-            aes(x = NES,
-                y = reorder(pathway, NES),
-                size = -log10(padj),
-                color = NES)) +
-  geom_point() +
-  scale_color_gradientn(colors = brewer.pal(9, "PuRd")[3:9]) +
-  scale_size_continuous(name = "-log10(padj)") +
-  theme_minimal() +
-  theme(
-    axis.text.y = element_text(size = 10),
-    axis.title = element_text(size = 12),
-    plot.title = element_text(size = 14),
-    panel.grid.minor = element_blank()
-  ) +
-  labs(x = "Normalized Enrichment Score (NES)",
-       y = "Pathway")
-plot(p)
-dev.off()
-

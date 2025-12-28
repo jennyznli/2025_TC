@@ -1,32 +1,21 @@
 # ============================================================
-#   FIG 2.
-#   This script performs differential methylation analysis
-#   for 88 primary tumor samples:
-#   Invasiveness & Methylation Clusters
+# Performs differential methylation for invasiveness on 
+# the pediatric cohort. 
 # ============================================================
-# ========================
-# CONFIGURATION
-# ========================
+source("../config.R")
+
 N_WORKERS <- 20
 
-BASE_DIR <- "/home/lijz/labprojects/20250721_Jenny/thyroid"
 R_DIR <- file.path(BASE_DIR, "R")
 SS_DIR <- file.path(BASE_DIR, "ss")
 DATA_DIR <- file.path(BASE_DIR, "data")
 
-source(file.path(R_DIR, "functions.R"))
-source(file.path(R_DIR, "color_keys.R"))
-source(file.path(R_DIR, "load_packages.R"))
-
 # ========================
-# INVASIVENESS
+# LOAD DATA
 # ========================
-cat("=== CLINICAL INVASIVENESS ANALYSIS ===\n")
-
-# Load data
-ss <- read_excel(file.path(SS_DIR, "20231102_thyroid_master.xlsx"))
-ss_primary <- ss %>% filter(Lymph_Node == "F", Primary_Include_In_Analysis == 1)
-betas <- readRDS(file.path(DATA_DIR, "ped_betas_QCDPB_prc.rds"))
+ss <- read_excel(file.path(SS_DIR, PED_META))
+ss_primary <- ss %>% filter(Lymph_Node == "F", Batch == "REF")
+betas <- readRDS(file.path(DATA_DIR, PED_BETAS))
 
 ss_primary$Chronological_Age <- as.numeric(ss_primary$Chronological_Age)
 ss_primary$Sex <- as.factor(ss_primary$Sex)

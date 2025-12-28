@@ -12,11 +12,11 @@ if (length(args) != 1) {
 DATASET <- args[1]
 
 # CONFIGS
+source("../config.R")
 DATASET_NAME <- args[1]
+
 CONFIG <- BiocParallel::SerialParam()
 
-# SETUP
-BASE_DIR <- "/home/lijz/labprojects/20250721_Jenny/thyroid"
 DATA_DIR <- file.path(BASE_DIR, "data")
 IDAT_DIR <- file.path(BASE_DIR, "idat", DATASET_NAME)
 

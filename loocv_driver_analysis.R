@@ -1,5 +1,5 @@
 # ============================================================
-# LOOCV DRIVER ANALYSIS
+# Plots figures for LOOCV of driver classifier.  
 # ============================================================
 source("config.R")
 
@@ -9,7 +9,7 @@ FEAT_DIR <- file.path(CL_DIR, "features")
 SUM_DIR <- file.path(CL_DIR, "summary")
 
 # ========================
-# Model Analysis
+# MODEL ANALYSIS
 # ========================
 overall_metrics <- readRDS(file.path(SUM_DIR, "loocv_overall_metrics.rds"))
 class_metrics <- readRDS(file.path(SUM_DIR, "loocv_per_class_metrics.rds"))
@@ -67,7 +67,7 @@ print(conf_matrix)
 # Balanced Accuracy               0.9692       1.00000               0.9606          0.9594
 
 # JOIN W SS
-ss <- read_excel(file.path("ss", "pediatric_thyroid_master.xlsx"))
+ss <- read_excel(file.path("ss", PED_META))
 ss1 <- left_join(ss, pred_results, by="IDAT")
 ss1 <- ss1 %>%
   dplyr::mutate(
@@ -77,7 +77,7 @@ ss1 <- ss1 %>%
   ) %>% 
   dplyr::select(-True_Label, -Predicted, -Accuracy, -Fold, -Prob_BRAF.V600E, -Prob_DICER1, -Prob_Kinase.Fusion, -Prob_Ras.like)
 
-write_xlsx(ss1, file.path("ss", "pediatric_thyroid_master.xlsx"))
+write_xlsx(ss1, file.path("ss", PED_META))
 
 # ========================
 # ROC CURVES

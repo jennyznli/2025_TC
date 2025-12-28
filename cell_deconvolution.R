@@ -1,7 +1,7 @@
 # ============================================================
-# CELL TYPE DECONVOLUTION
+# Cell type deconvolution for pediatric and adult cohorts.
 # ============================================================
-source(file.path("config.R"))
+source("config.R")
 
 # ========================
 # LOAD DATA
@@ -12,10 +12,10 @@ ss_adt <- read_excel(file.path("ss", ADT_META))
 data(centEpiFibIC.m) # solid tissue - epithelial, fibroblast, immune cell types
 data(centBloodSub.m) # immune sells - 7 types
 
-betas_ped <- readRDS(file.path(data, "ped_betas_QCDPB_prc.rds"))
-betas_adt <- readRDS(file.path(data, "adt_betas_QCDPB_pr.rds"))
+betas_ped <- readRDS(file.path("data", "ped_betas_QCDPB_prc.rds"))
+betas_adt <- readRDS(file.path("data", "adt_betas_QCDPB_pr.rds"))
 
-### THREE CELL TYPE DECONVOLUTION ### 
+### BROAD CELL TYPE DECONVOLUTION ### 
 cef_ped <- epidish(beta.m = betas_ped, ref.m = centEpiFibIC.m, method = "RPC")
 cef_adt <- epidish(beta.m = betas_adt, ref.m = centEpiFibIC.m, method = "RPC")
 
@@ -24,8 +24,6 @@ cef_adt <- epidish(beta.m = betas_adt, ref.m = centEpiFibIC.m, method = "RPC")
 # IC = Immune Cells - All immune/inflammatory cells grouped together
 
 ### IMMUNE CELL TYPE DECONVOLUTION ### 
-# immune_ped <- hepidish(beta.m = betas_ped, ref1.m = centEpiFibIC.m, ref2.m = centBloodSub.m[,c(1, 2, 5)], h.CT.idx = 3, method = 'RPC')
-# immune_adt <- hepidish(beta.m = betas_adt, ref1.m = centEpiFibIC.m, ref2.m = centBloodSub.m[,c(1, 2, 5)], h.CT.idx = 3, method = 'RPC')
 immune_ped <- hepidish(beta.m = betas_ped, ref1.m = centEpiFibIC.m, ref2.m = centBloodSub.m, h.CT.idx = 3, method = 'RPC')
 immune_adt <- hepidish(beta.m = betas_adt, ref1.m = centEpiFibIC.m, ref2.m = centBloodSub.m, h.CT.idx = 3, method = 'RPC')
 
@@ -35,28 +33,24 @@ cef_adt_df <- as.data.frame(cef_adt$estF)
 cef_adt_df$IDAT <- rownames(cef_adt_df)
 
 immune_ped <- as.data.frame(immune_ped)
-immune_adt1 <- as.data.frame(immune_adt)
+immune_adt <- as.data.frame(immune_adt)
 immune_ped$IDAT <- rownames(immune_ped)
 immune_adt$IDAT <- rownames(immune_adt)
 
-ped <- left_join(cef_ped_df[,c('IC', 'IDAT')], immune_ped, by = "IDAT")
-adt <- left_join(cef_adt_df[,c('IC', 'IDAT')], immune_adt, by = "IDAT")
+ped <- left_join(cef_ped_df[,c("Epi","Fib","IC","IDAT")], immune_ped, by="IDAT")
+adt <- left_join(cef_adt_df[,c("Epi","Fib","IC","IDAT")], immune_adt, by="IDAT")
 
 write.csv(ped, file.path("data", "ped_betas_QCDPB_prc_epidish.csv"), row.names = FALSE)
 write.csv(adt, file.path("data", "adt_betas_QCDPB_pr_epidish.csv"), row.names = FALSE)
 
 # ========================
-# HEATMAP - 87 PRIMARY
+# HEATMAP - PRIMARY REFERENCE 
 # ========================
 ped <- read.csv(file.path("data", "ped_betas_QCDPB_prc_epidish.csv"))
 
 ss <- read_excel(file.path("ss", PED_META)) %>% 
-  filter(Primary_Include_In_Analysis == "1", Lymph_Node == "F", Batch == "REF")
-ss_ln <- read_excel(file.path("ss", PED_META)) %>% 
-  filter(LN_Include_In_Analysis == "1", Batch == "REF")
-
+  filter(Lymph_Node == "F", Batch == "REF")
 dim(ss)
-dim(ss_ln)
 
 ped <- ped %>% filter(IDAT %in% ss$IDAT)
 
@@ -96,13 +90,9 @@ p2 <- pheatmap(t(leuko_df),
                show_colnames = FALSE,
                silent = TRUE)
 
-pdf(file.path("figures", "epidish_combined_heatmap.pdf"),
-    width = 10, height = 6, onefile = FALSE)
+pdf(file.path("figures", "epidish_combined_heatmap.pdf"), width = 10, height = 6, onefile = FALSE)
 grid.arrange(p1[[4]], p2[[4]], 
              nrow = 2, 
              heights = c(0.4, 0.6))
 dev.off()
-
-
-
 

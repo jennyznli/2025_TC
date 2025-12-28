@@ -1,22 +1,15 @@
 # ============================================================
 #   This script performs joint processing/imputation for
-#   pediatric + adult betas.
+#   pediatric + adult betas, and creates a joint spreadsheet.
 # ============================================================
+source("../config.R")
 
-# ========================
-# CONFIGURATION
-# ========================
-BASE_DIR <- "/home/lijz/labprojects/20250721_Jenny/thyroid"
 R_DIR <- file.path(BASE_DIR, "R")
 SS_DIR <- file.path(BASE_DIR, "ss")
 DATA_DIR <- file.path(BASE_DIR, "data")
 
-source(file.path(R_DIR, "functions.R"))
-source(file.path(R_DIR, "color_keys.R"))
-source(file.path(R_DIR, "load_packages.R"))
-
 # ========================
-# LOADING DATA
+# LOAD DATA
 # ========================
 betas_ped <- readRDS(file.path(DATA_DIR, "ped_betas_QCDPB_prc.rds"))
 cat("Collapsed EPICv2 beta dimensions:", dim(betas_ped), "\n")
@@ -40,4 +33,26 @@ joint_betas <- cbind(betas_ped[joint_probes,], betas_adult[joint_probes,])
 cat("Joint beta matrix dimensions:", dim(joint_betas), "\n")
 
 saveRDS(joint_betas, file.path(DATA_DIR, "jnt_betas_QCDPB_pr.rds"))
+
+# ========================
+# MAKE JOINT SPREADSHEET
+# ========================
+cols <- c("Source","Batch", "IDAT", "Sample_ID", "Lymph_Node", "Paired_Primary", 
+          "Consensus_Cluster", "Chronological_Age", "Sex",
+          "Histology", "Clinical_Invasiveness", "N", "M", "Driver_Group",
+          "Epigenetic_Age", "IC_EpiDISH", "Probe_Success_Rate", "Reference")
+
+ss_adt <- read_excel(file.path("ss", ADT_META))
+ss_adt$Consensus_Cluster <- NA
+ss_adt$Batch <- "ADT"
+ss_adt <- ss_adt[, cols]
+
+ss_ped <- read_excel(file.path("ss", PED_META))
+ss_ped <- ss_ped[, cols]
+dim(ss_ped)
+ss_ped$Chronological_Age <- as.numeric(ss_ped$Chronological_Age)
+
+ss <- rbind(ss_ped, ss_adt)
+
+write_xlsx(ss, file.path("ss", "joint_master.xlsx"))
 

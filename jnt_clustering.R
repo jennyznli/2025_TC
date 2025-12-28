@@ -1,13 +1,10 @@
-# FIG 3 - JOINT ANALYSIS 
-# Clustering 
-# ========================
-# LOAD DATA
-# ========================
-ss <- read_excel(file.path("ss", JNT_META))
-ss_ref <- ss %>% dplyr::filter(Reference == 1) #600
-ss_primary_ref <- ss %>% dplyr::filter(Lymph_Node == "F", Reference == 1) #536
-ss_primary_all <- ss %>% dplyr::filter(Lymph_Node == "F") #621
+# ============================================================
+# Generates tSNE coordinates for the joint cohort. 
+# ============================================================
+source("config.R")
 
+ss <- read_excel(file.path("ss", JNT_META))
+ss_primary_ref <- ss %>% dplyr::filter(Lymph_Node == "F", Reference == 1)
 pca <- readRDS(file.path("data", "jnt_betas_QCDPB_pr_30000_pca.rds"))
 
 # ========================
@@ -21,8 +18,9 @@ cat("90% variance threshold:", num_pcs, "PCs\n")
 pcs <- as.data.frame(pca$x[, 1:num_pcs])
 
 write.csv(pcs, file.path("data", "jnt_unmasked_pca_coords.csv"))
+
 # ========================
-# FINAL t-SNE
+# GENERATE t-SNE EMBEDDINGS
 # ========================
 run_tsne <- function(pca_coords, output_name) {
   n_samples <- nrow(pca_coords)
@@ -57,11 +55,6 @@ run_tsne <- function(pca_coords, output_name) {
   return(df)
 }
 
-run_tsne(pcs[ss$IDAT,], "jnt_tsne_all")
-run_tsne(pcs[ss_ref$IDAT,], "jnt_tsne_ref")
 run_tsne(pcs[ss_primary_ref$IDAT,], "jnt_tsne_primary_ref")
-run_tsne(pcs[ss_primary_all$IDAT,], "jnt_tsne_primary_all")
-
-
 
 

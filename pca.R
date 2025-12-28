@@ -3,18 +3,15 @@
 #   Usage: Rscript pca.R <betas_filename> <number of top variable probes used>
 #   Example: Rscript pca.R ped_betas_QCDPBP_prc.rds 30000
 # ============================================================
-setwd("../data")
 
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args) != 2) stop("Usage: Rscript pca.R <input_rds_file> <number of top variable probes used>")
 
-suppressMessages({
-  library(tools)
-  source("../R/functions.R")
-})
+# CONFIGS 
+source("../config.R")
 
 input <- args[1]
-n_probes <- as.numeric(args[2])  # Convert to numeric
+n_probes <- as.numeric(args[2])
 cat("Input betas file:", input, "\n")
 cat("Input probes selected:", n_probes, "\n")
 
@@ -26,9 +23,8 @@ cat("Initial betas dimensions:", dim(data), "\n")
 
 # PCA on all probes
 pca_all <- prcomp(t(data), scale. = TRUE)
-output_file <- file.path(dir, paste0(name, "_pca.rds")) 
+output_file <- file.path(dir, paste0(name, "_pca.rds"))
 saveRDS(pca_all, output_file)
-#saveRDS(as.data.frame(pca_all$x), output_file)
 cat("PCA on all probes dimensions:", dim(pca_all$x), "\n")
 
 # PCA on top most variable probes
