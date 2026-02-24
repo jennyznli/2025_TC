@@ -6,6 +6,7 @@
 project_root/
 ├── scripts/                            # Analysis scripts
 ├── R/                                  # Helper scripts
+├── models/                             # Models 
 ├── README.md                           
 └── config.R                                 
 ```
@@ -117,6 +118,26 @@ Generation of cohort figures
 Rscript ped_stats.R
 ```
 
+### Model Usage
+Download and load the model. QC your methylation betas, and ensure that you have no NAs and subset to the feature probes used by the model. Apply the model like so
+```
+model     <- readRDS("models/invasiveness_model.rds")
+sel_probes <- model$finalModel$xNames   # probes used during training
+
+betas_sel  <- betas[sel_probes, ]       # CpGs x samples
+
+pred_class <- predict(model, t(betas_sel))
+pred_prob  <- predict(model, t(betas_sel), type = "prob")
+
+predictions <- data.frame(
+  IDAT            = colnames(betas_sel),
+  Predicted_Class = pred_class,
+  pred_prob,
+  Max_Probability = apply(pred_prob, 1, max)
+)
+
+write.csv(predictions, "invasiveness_predictions.csv", row.names = FALSE)
+```
 
 ## Support
 
