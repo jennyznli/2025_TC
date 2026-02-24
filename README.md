@@ -9,11 +9,21 @@ project_root/
 ├── scripts/                            # Analysis scripts
 ├── R/                                  # Helper scripts
 ├── models/                             # Models 
-├── README.md                           
-└── config.R                                 
+├── config.R                             
+└── README.md                              
 ```
 
-## Overview
+## Model Usage
+Clone our repo. QC your methylation betas (can use above pipeline), but ensure that there are no NAs.
+```
+model <- readRDS("models/invasiveness_model.rds")
+sel_probes <- rownames(model$importance) # CpG probes used during training
+betas_sel  <- betas[sel_probes, ] # CpGs x samples
+pred_class <- predict(model, t(betas_sel))
+pred_prob  <- predict(model, t(betas_sel), type = "prob")
+```
+
+## Data Analysis
 
 ### Preprocessing
 Extract beta values from IDAT files
@@ -121,16 +131,6 @@ Rscript fmodel_analysis.R
 Generation of cohort figures
 ```
 Rscript ped_stats.R
-```
-
-### Model Usage
-Download and load the model. QC your methylation betas, and ensure that you have no NAs and subset to the feature probes used by the model. Apply the model like so
-```
-model <- readRDS("models/invasiveness_model.rds")
-sel_probes <- model$finalModel$xNames   # probes used during training
-betas_sel  <- betas[sel_probes, ]       # CpGs x samples
-pred_class <- predict(model, t(betas_sel))
-pred_prob  <- predict(model, t(betas_sel), type = "prob")
 ```
 
 ## Support
