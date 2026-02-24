@@ -1,4 +1,6 @@
 # DNA Methylation-based Risk Stratification and Classification of Pediatric Thyroid Carcinoma Invasiveness
+This repository is for raw data processing and downstream data analysis & visualization in the "DNA Methylation-based Risk Stratification and Classification of Pediatric Thyroid Carcinoma Invasiveness" manuscript.
+
 
 ## Repository Structure
 
@@ -31,6 +33,7 @@ Join pediatric and adult cohorts
 Rscript jnt_probes.R
 ```
 
+### Inference
 Infer miR-200c status with CytoMethIC
 ```
 Rscript mir200c.R ped_betas_QCDPB_prc.rds EPIC
@@ -42,19 +45,20 @@ Cell-type deconvolution with EpiDISH
 Rscript cell_deconvolution.R
 ```
 
+### Unsupervised clustering
 Run PCA on top 30k most variable CpGs
 ```
 Rscript pca.R ped_betas_QCDPB_prc.rds 30000
 Rscript pca.R adt_betas_QCDPB_pr.rds 30000
 Rscript pca.R jnt_betas_QCDPB_pr.rds 30000
 ```
-
-### Figure 1
 Consensus clustering and generation of t-SNE embeddings
 ```
 Rscript ped_clustering.R
 Rscript adt_clustering.R
 Rscript jnt_clustering.R
+
+### Figure 1
 ```
 Plotting of t-SNE visualizations
 ```
@@ -63,7 +67,7 @@ Rscript adt_tsne.R
 Rscript jnt_tsne.R
 ```
 
-### Figure 2
+### Differential methylation
 Differential methylation on pediatric cohort (invasiveness, cluster)
 ```
 Rscript ped_diff_meth_inv.R
@@ -81,19 +85,20 @@ Plotting and analysis of differential methylation
 Rscript ped_diff_meth_analysis.R
 Rscript adt_diff_meth_analysis.R
 
+### RNA analysis
 ```
 RNA-seq analysis (differential expression, GSEA)
 ```
 Rscript rna.R
 ```
 
-### Figure 3
+### Age analysis 
 Epigenetic age analysis
 ```
 Rscript jnt_age.R
 ```
 
-### Figure 4
+### Random forest development 
 Leave one out cross validation (LOOCV) on the reference cohort
 ```
 Rscript loocv_invasiveness.R
@@ -121,22 +126,11 @@ Rscript ped_stats.R
 ### Model Usage
 Download and load the model. QC your methylation betas, and ensure that you have no NAs and subset to the feature probes used by the model. Apply the model like so
 ```
-model     <- readRDS("models/invasiveness_model.rds")
+model <- readRDS("models/invasiveness_model.rds")
 sel_probes <- model$finalModel$xNames   # probes used during training
-
 betas_sel  <- betas[sel_probes, ]       # CpGs x samples
-
 pred_class <- predict(model, t(betas_sel))
 pred_prob  <- predict(model, t(betas_sel), type = "prob")
-
-predictions <- data.frame(
-  IDAT            = colnames(betas_sel),
-  Predicted_Class = pred_class,
-  pred_prob,
-  Max_Probability = apply(pred_prob, 1, max)
-)
-
-write.csv(predictions, "invasiveness_predictions.csv", row.names = FALSE)
 ```
 
 ## Support
