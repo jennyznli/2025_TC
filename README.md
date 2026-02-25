@@ -12,16 +12,20 @@ project_root/
 ├── config.R                             
 └── README.md                              
 ```
+## Setup 
+Edit the config with the appropriate file names. 
 
 ## Model Usage
-Clone our repo. QC your methylation betas (can use above pipeline), but ensure that there are no NAs.
+DNA methylation data was obtained using Infinium MethylationEPIC. Standard processing, including background correction, normalization, etc. must be performed to obtained methylation beta values (0-1). An example processing pipeline with SeSaME is shown below. If using EPICv2.0, you must collapse the probe names down to the prefixes before applying the classifier. There must be no NAs in the data. 
 ```
 model <- readRDS("models/invasiveness_model.rds")
 sel_probes <- rownames(model$importance) # CpG probes used during training
 betas_sel  <- betas[sel_probes, ] # CpGs x samples
 pred_class <- predict(model, t(betas_sel))
-pred_prob  <- predict(model, t(betas_sel), type = "prob")
+pred_prob  <- predict(model, t(betas_sel), type = "prob") # view probabilities
 ```
+The invasiveness model will predict "High" or "Low". 
+The driver model will predict one of the four classes: "Kinase Fusion," "BRAFV600E," "Ras-like," or "DICER1."
 
 ## Data Analysis
 
